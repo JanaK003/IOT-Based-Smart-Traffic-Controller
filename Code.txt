@@ -1,0 +1,99 @@
+import RPi.GPIO as GPIO
+import time
+
+# Setup GPIO mode
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+
+# Define GPIO pins for each sensor (TRIG and ECHO)
+sensors = {
+    "north": {"TRIG": 23, "ECHO": 17},
+    "east": {"TRIG": 24, "ECHO": 27},
+    "south": {"TRIG": 25, "ECHO": 22},
+    "west": {"TRIG": 26, "ECHO": 5},
+}
+
+# Define GPIO pins for traffic lights (LED simulation)
+traffic_lights = {
+    "north": {"red": 18, "yellow": 19, "green": 20},
+    "east": {"red": 21, "yellow": 22, "green": 23},
+    "south": {"red": 24, "yellow": 25, "green": 26},
+    "west": {"red": 27, "yellow": 28, "green": 29},
+}
+
+# Initialize sensor GPIO pins
+for direction in sensors:
+    GPIO.setup(sensors[direction]["TRIG"], GPIO.OUT)
+    GPIO.setup(sensors[direction]["ECHO"], GPIO.IN)
+
+# Initialize traffic light GPIO pins
+for direction in traffic_lights:
+    for color in traffic_lights[direction]:
+        GPIO.setup(traffic_lights[direction][color], GPIO.OUT)
+        GPIO.output(traffic_lights[direction][color], False)
+
+def measure_distance(sensor):
+    # Set TRIG high for 10 microseconds
+    GPIO.output(sensor["TRIG"], True)
+    time.sleep(0.00001)
+    GPIO.output(sensor["TRIG"], False)
+
+    # Wait for ECHO response
+    while GPIO.input(sensor["ECHO"]) == 0:
+        pulse_start = time.time()
+
+    while GPIO.input(sensor["ECHO"]) == 1:
+        pulse_end = time.time()
+
+    # Calculate distance based on pulse duration
+    pulse_duration = pulse_end - pulse_start
+    distance = pulse_duration * 17150  # Speed of sound in air is 34300 cm/s
+    distance = round(distance, 2)
+
+    return distance
+
+def manage_traffic():
+    # Measure distance for each direction
+    distances = {}
+    for direction in sensors:
+        distance = measure_distance(sensors[direction])
+        distances[direction] = distance
+        print(f"Distance {direction}: {distance} cm")
+
+    # Determine which direction has the highest traffic (closest vehicle)
+    max_traffic_direction = min(distances, key=distances.get)
+
+    # Turn on the green light for the direction with the highest traffic
+    for direction in traffic_lights:
+        if direction == max_traffic_direction:
+            set_traffic_light(direction, 'green')
+        else:
+            set_traffic_light(direction, 'red')
+
+    print(f"Traffic light is green for {max_traffic_direction}")
+
+def set_traffic_light(direction, state):
+    # Set traffic lights based on state (green, red, yellow)
+    if state == 'green':
+        GPIO.output(traffic_lights[direction]['green'], True)
+        GPIO.output(traffic_lights[direction]['red'], False)
+        GPIO.output(traffic_lights[direction]['yellow'], False)
+    elif state == 'yellow':
+        GPIO.output(traffic_lights[direction]['yellow'], True)
+        GPIO.output(traffic_lights[direction]['green'], False)
+        GPIO.output(traffic_lights[direction]['red'], False)
+    else:  # red
+        GPIO.output(traffic_lights[direction]['red'], True)
+        GPIO.output(traffic_lights[direction]['green'], False)
+        GPIO.output(traffic_lights[direction]['yellow'], False)
+
+try:
+    while True:
+        manage_traffic()
+        time.sleep(5)  # Pause for 5 seconds before next check
+
+except KeyboardInterrupt:
+    print("Traffic control system interrupted")
+
+finally:
+    GPIO.cleanup()
